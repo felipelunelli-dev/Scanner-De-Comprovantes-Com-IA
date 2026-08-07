@@ -1,57 +1,157 @@
-/* 
-Variável - Um pedacinho da memória do computador
-que eu guardo o que eu quiser
-let 
-console.log() - Mostra algo na tela
+let total = 0;
 
-Função - Pedacinho de código QUE
-Só executa QUANDO eu CHAMO ELA
+async function lerFoto() {
+    const foto = document.querySelector(".foto").files[0];
 
-Lógica de Programação - Pensar como computador pensa
-Algoritmo - Receita de bolo
+    if (!foto) {
+        alert("Selecione uma foto do comprovante.");
+        return;
+    }
 
-[x] Carregar a foto
-[x] Falar QUAL FOTO eu vou carregar  
-[x] Salva a foto  
-[x] Enviar para a IA foto + orientação
-[x] Receber a resposta da IA  
-[x] Formatar a resposta
-[x] Colocar na tela   
-[ ] Estilizar a lista
-     
-document = HTML
-querySelector = Selecionar um elemento do HTML
-innerHTML = Colocar algo dentro do HTML
-*/
+    const botao = document.querySelector("button");
 
-let pedido = 'Olhe a foto deste comprovante e responda em UMA linha, sem escrever mais nada, com 2 pedaços separados por |. Primeiro pedaço: o emoji da categoria, o nome do estabelecimento dentro de <strong>, e depois cada item comprado com seu valor, um por linha usando <br>. Segundo pedaço: o total pago, só o número, com ponto e sempre com duas casas decimais. As categorias são: 🛒 Mercado, 🚗 Transporte, 🍔 Comida, 💊 Saúde, 🎉 Lazer, 🏠 Casa, 💸 Outros. Exemplo de resposta: 🍔 <strong>Padaria Pão Quente</strong><br>Pão — R$ 5,00<br>Leite — R$ 4,50|9.50';
-let total = 0
+    try {
+        if (botao) {
+            botao.disabled = true;
+            botao.innerText = "Lendo comprovante...";
+        }
 
-async function lerFoto(){
-    // Pegar a foto do input
-    let foto = document.querySelector(".foto").files[0]
+        // ==============================
+        // PREPARAR FOTO
+        // ==============================
 
-    // Chamada Assincrona
-    // Estou pegando a INFO e estou enviando para a IA
-    let resposta = await puter.ai.chat(pedido, foto)
+        const formData = new FormData();
+        formData.append("foto", foto);
 
-    // Pegar a resposta da IA e filtrar para mostrar na tela
-    let texto = resposta.message.content
-    let partes = texto.split("|")
-    console.log(partes)
+        // ==============================
+        // ENVIAR PARA PUTER WORKER
+        // ==============================
 
-    // Colocar na tela
-    document.querySelector(".lista").innerHTML += `
-        <div class="comprovante">
+        const resposta = await fetch(
+            "https://scanner.puter.work/scanner",
+            {
+                method: "POST",
+                body: formData
+            }
+        );
 
-            <div class="itens">${partes[0]}</div>
+        // ==============================
+        // RECEBER RESULTADO
+        // ==============================
 
-            <div class="total-nota">Total da nota: R$ ${partes[1]}</div>
+        const dados = await resposta.json();
 
-        </div>
-    `
+        console.log("Resposta do Worker:", dados);
 
-    total += Number(partes[1])
-    document.querySelector(".total-gasto").innerHTML = "R$" + total.toFixed(2)
-    console.log(".total-gasto")
+        if (!resposta.ok) {
+            throw new Error(
+                dados.erro || "Erro ao analisar comprovante."
+            );
+        }
+
+        // ==============================
+        // VALIDAR DADOS
+        // ==============================
+
+        const estabelecimento =
+            dados.estabelecimento || "Estabelecimento não identificado";
+
+        const categoria =
+            dados.categoria || "💸 Outros";
+
+        const itens =
+            Array.isArray(dados.itens) ? dados.itens : [];
+
+        let valorTotal = Number(dados.total);
+
+        if (isNaN(valorTotal)) {
+            valorTotal = 0;
+        }
+
+        // ==============================
+        // MONTAR ITENS
+        // ==============================
+
+        let itensHTML = "";
+
+        if (itens.length > 0) {
+            itens.forEach(item => {
+
+                const nome =
+                    item.nome || "Item não identificado";
+
+                let valor =
+                    Number(item.valor);
+
+                if (isNaN(valor)) {
+                    valor = 0;
+                }
+
+                itensHTML += `
+                    <p>
+                        ${nome}
+                        — R$ ${valor.toFixed(2).replace(".", ",")}
+                    </p>
+                `;
+            });
+
+        } else {
+            itensHTML = `
+                <p>
+                    Nenhum item identificado
+                </p>
+            `;
+        }
+
+        // ==============================
+        // MOSTRAR NA TELA
+        // ==============================
+
+        document.querySelector(".lista").innerHTML += `
+            <div class="comprovante">
+
+                <div class="categoria">
+                    ${categoria}
+                </div>
+
+                <h3>
+                    ${estabelecimento}
+                </h3>
+
+                <div class="itens">
+                    ${itensHTML}
+                </div>
+
+                <div class="total-nota">
+                    Total da nota:
+                    R$ ${valorTotal.toFixed(2).replace(".", ",")}
+                </div>
+
+            </div>
+        `;
+
+        // ==============================
+        // SOMAR TOTAL GERAL
+        // ==============================
+
+        total += valorTotal;
+
+        document.querySelector(".total-gasto").innerHTML =
+            "R$ " + total.toFixed(2).replace(".", ",");
+
+    } catch (erro) {
+
+        console.error("Erro:", erro);
+
+        alert(
+            "Não foi possível ler o comprovante."
+        );
+
+    } finally {
+
+        if (botao) {
+            botao.disabled = false;
+            botao.innerText = "Escanear comprovante";
+        }
+    }
 }
